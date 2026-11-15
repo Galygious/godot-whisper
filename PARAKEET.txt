@@ -56,7 +56,7 @@ INSTALL IN AN EXISTING PROJECT
    To manually submit an existing mono float audio buffer:
      $ParakeetCapture.transcribe_audio(samples, sample_rate)
    transcribe_audio returns false if the model is loading or the decoder
-   is busy. Stop waits for an active phrase endpoint; it does not cancel
+   is busy. Stop submits a captured partial phrase; it does not cancel
    an in-flight decode. For explicit destruction, use queue_free(), or
    call shutdown() before free(). Normal scene exit joins the worker.
 
