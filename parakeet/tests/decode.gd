@@ -26,4 +26,14 @@ func _initialize() -> void:
 		if not str(result.error).is_empty() or not "country" in str(result.text).to_lower():
 			quit(1)
 			return
+	# Microphone capture commonly runs at 48 kHz. Exercise the runtime's
+	# resampling path with the same clip rather than assuming 16 kHz input.
+	var microphone_rate := PackedFloat32Array()
+	microphone_rate.resize(samples.size() * 3)
+	for index in range(samples.size()):
+		for offset in range(3):
+			microphone_rate[index * 3 + offset] = samples[index]
+	var resampled: Dictionary = engine.transcribe(microphone_rate, 48000)
+	assert(str(resampled.error).is_empty() and "country" in str(resampled.text).to_lower())
+	print("PASS: 48 kHz mono input decoded through native resampling")
 	quit(0)
