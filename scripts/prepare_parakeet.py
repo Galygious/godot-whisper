@@ -28,6 +28,8 @@ def main():
     vendor = project / "vendor"
     cache = args.cache or vendor / "downloads"
     cache.mkdir(parents=True, exist_ok=True)
+    vendor.mkdir(parents=True, exist_ok=True)
+    (vendor / ".gdignore").touch()
     manifest = json.loads((project / "dependencies.json").read_text())
     addon = project / "addons/godot_parakeet/bin"
     addon.mkdir(parents=True, exist_ok=True)

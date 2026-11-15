@@ -4,3 +4,4 @@
 /.godot/
 /*.apk
 *.obj
+*.obj.import
