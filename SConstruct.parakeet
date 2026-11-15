@@ -1,0 +1,19 @@
+import os
+from pathlib import Path
+
+env = SConscript("thirdparty/godot-cpp/SConstruct").Clone()
+deps = Path(ARGUMENTS.get("sherpa_root", "parakeet/vendor")).resolve()
+env.Append(CPPPATH=[str(deps / "include")])
+target = "parakeet/addons/godot_parakeet/bin/"
+if env["platform"] == "android" and env["arch"] == "arm64":
+    env.Append(LIBPATH=[str(deps / "android")], LIBS=["sherpa-onnx-c-api"])
+    env.Append(LINKFLAGS=["-Wl,--no-undefined", "-Wl,-z,max-page-size=16384"])
+    target += "libgodot_parakeet.android.arm64.so"
+elif env["platform"] == "windows" and env["arch"] == "x86_64":
+    env.Append(CPPDEFINES=["SHERPA_ONNX_BUILD_SHARED_LIBS"])
+    env.Append(LIBPATH=[str(deps / "windows")], LIBS=["sherpa-onnx-c-api"])
+    target += "godot_parakeet.windows.x86_64.dll"
+else:
+    raise RuntimeError("Parakeet build currently supports Android ARM64 and Windows x86_64")
+library = env.SharedLibrary(target, source=["parakeet/native/parakeet.cpp"])
+Default(library)

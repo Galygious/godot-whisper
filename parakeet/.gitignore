@@ -1,0 +1,6 @@
+/vendor/
+/addons/godot_parakeet/bin/
+/addons/godot_parakeet/models/
+/.godot/
+/*.apk
+*.obj

@@ -1,0 +1,18 @@
+NVIDIA Parakeet TDT 0.6B v2 (English)
+Original model: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+Creator: NVIDIA
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License terms: https://creativecommons.org/licenses/by/4.0/
+
+This addon uses the ONNX INT8 conversion distributed by the Sherpa-ONNX
+project. Conversion/quantization changes the original model's representation.
+Model package:
+https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2
+
+No additional model training or weight modifications were performed by this
+fork. File and source archive SHA256 values are in parakeet/dependencies.json.
+The model is distributed as a separate release asset, not committed to Git.
+
+Test audio (JFK speech): derived from whisper.cpp/samples/jfk.wav in the
+upstream ggml-org/whisper.cpp project; converted from PCM16 to float32 for
+the test runner. It is not included in the addon runtime's microphone input.

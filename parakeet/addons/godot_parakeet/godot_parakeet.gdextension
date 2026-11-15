@@ -1,0 +1,15 @@
+[configuration]
+entry_symbol = "godot_parakeet_library_init"
+compatibility_minimum = "4.2"
+
+[libraries]
+android.debug.arm64 = "bin/libgodot_parakeet.android.arm64.so"
+android.release.arm64 = "bin/libgodot_parakeet.android.arm64.so"
+windows.debug.x86_64 = "bin/godot_parakeet.windows.x86_64.dll"
+windows.release.x86_64 = "bin/godot_parakeet.windows.x86_64.dll"
+
+[dependencies]
+android.debug.arm64 = { "bin/android/libonnxruntime.so": "", "bin/android/libsherpa-onnx-c-api.so": "" }
+android.release.arm64 = { "bin/android/libonnxruntime.so": "", "bin/android/libsherpa-onnx-c-api.so": "" }
+windows.debug.x86_64 = { "bin/onnxruntime.dll": "", "bin/sherpa-onnx-c-api.dll": "", "bin/onnxruntime_providers_shared.dll": "" }
+windows.release.x86_64 = { "bin/onnxruntime.dll": "", "bin/sherpa-onnx-c-api.dll": "", "bin/onnxruntime_providers_shared.dll": "" }

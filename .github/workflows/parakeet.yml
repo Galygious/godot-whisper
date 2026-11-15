@@ -1,0 +1,73 @@
+name: Parakeet Android and Windows
+on:
+  push:
+    branches: [parakeet-android]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: parakeet-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare dependencies
+        run: |
+          python -m pip install scons==4.11.1
+          sdkmanager 'ndk;27.3.13750724'
+          python scripts/prepare_parakeet.py --platform android
+      - name: Build and verify native dependency closure
+        run: |
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.3.13750724"
+          scons -f SConstruct.parakeet platform=android arch=arm64 target=template_release ANDROID_HOME= build_profile=parakeet/build_profile.json -j2
+          python scripts/check_parakeet_android.py --ndk "$ANDROID_NDK_ROOT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Parakeet-Android-ARM64
+          path: parakeet/addons/godot_parakeet
+  windows-runtime:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare dependencies and model
+        run: |
+          python -m pip install scons==4.11.1
+          python scripts/prepare_parakeet.py --platform windows --models
+      - name: Build Windows editor/runtime library
+        run: scons -f SConstruct.parakeet platform=windows arch=x86_64 target=template_release use_static_cpp=no build_profile=parakeet/build_profile.json -j2
+      - name: Test actual transcription and node lifecycle
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/godotengine/godot/releases/download/4.6.2-stable/Godot_v4.6.2-stable_win64.exe.zip -OutFile godot.zip
+          Expand-Archive godot.zip -DestinationPath godot-bin
+          $godot = (Resolve-Path godot-bin/Godot_v4.6.2-stable_win64_console.exe).Path
+          & $godot --headless --path parakeet --editor --import *> import.log
+          # The first headless editor import can crash on shutdown; runtime
+          # tests below must still pass, and script errors are never ignored.
+          if (Select-String -Path import.log -Pattern 'SCRIPT ERROR|Parse Error|Failed to load script') { throw 'Script import failed' }
+          & $godot --headless --path parakeet --script res://tests/decode.gd
+          if ($LASTEXITCODE -ne 0) { throw 'Native transcription test failed' }
+          & $godot --headless --path parakeet --script res://tests/capture.gd
+          if ($LASTEXITCODE -ne 0) { throw 'Capture lifecycle test failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Parakeet-Windows-x64
+          path: parakeet/addons/godot_parakeet/bin

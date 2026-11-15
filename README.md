@@ -1,3 +1,22 @@
+## Parakeet alternative for Quest 3
+
+This branch adds a separate `addons/godot_parakeet` addon using Sherpa-ONNX
+and Parakeet TDT 0.6B v2 INT8. It includes Android ARM64 and Windows x86_64
+builds, background phrase decoding, automatic microphone bus routing, and
+magic-command signals. The original Whisper addon remains separate.
+
+**[Parakeet v0.2.0 downloads](https://github.com/Galygious/godot-whisper/releases/tag/parakeet-test-v0.2.0)**
+
+Download both the addon ZIP and the separate approximately 631 MiB model ZIP.
+See [PARAKEET.txt](PARAKEET.txt) for installation and source build steps.
+The example project is in [parakeet/](parakeet/).
+
+This is an experimental CPU implementation. Desktop transcription and
+integration tests pass; Quest performance and memory use are unverified.
+The 600M-parameter model is much larger than Whisper tiny, and no Quest
+speedup is promised. The two versions can be compared without replacing
+each other's files.
+
 ## Quest 3 Android test fork
 
 This fork fixes the Android ARM64 unresolved NEON `load` symbol reported in

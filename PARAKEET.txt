@@ -1,0 +1,169 @@
+Parakeet Godot addon v0.2.0 -- experimental Quest 3 / Android ARM64 target
+
+This is a separate addon from godot_whisper. It uses Sherpa-ONNX 2.0.1 and
+NVIDIA Parakeet TDT 0.6B v2 INT8 (English). It does not load Whisper .bin
+models and does not use the WhisperResource Inspector fields.
+
+RELEASE
+https://github.com/Galygious/godot-whisper/releases/tag/parakeet-test-v0.2.0
+Source branch: parakeet-android
+
+INSTALL IN AN EXISTING PROJECT
+
+1. Close Godot. Extract Godot-Parakeet-Addon-v0.2.0.zip into the project's
+   root so that addons/godot_parakeet is alongside your other addons.
+   This ZIP includes Android ARM64 libraries, Windows x86_64 editor/runtime
+   libraries, addon script, and licenses. Keep the entire bin folder.
+
+2. Extract Parakeet-TDT-v2-INT8-Models.zip into the SAME project root.
+   The four files should end up in:
+     addons/godot_parakeet/models/parakeet-tdt-0.6b-v2-int8/
+       encoder.int8.onnx
+       decoder.int8.onnx
+       joiner.int8.onnx
+       tokens.txt
+   Model files total about 631 MiB. This is not a tiny model. Do not put
+   ggml-tiny or a Silero .bin in this directory.
+
+3. Open Godot. Add a Node and attach:
+     res://addons/godot_parakeet/parakeet_capture.gd
+   It appears as ParakeetCapture once Godot scans the script. No editor
+   plugin activation is required. Keep the default Model Directory if
+   you extracted the model ZIP as above.
+
+4. Enable Audio > Driver > Enable Input in Project Settings. Wait for the
+   node's model_loaded signal before submitting audio. Loading occurs on
+   a worker thread, not on the game's main thread.
+
+5. Request RECORD_AUDIO permission before calling start_recording() on
+   Android. Once granted:
+     $ParakeetCapture.start_recording()
+   The node creates a ParakeetRecord bus, adds AudioEffectCapture, routes
+   its own AudioStreamMicrophone player to it, and mutes output to avoid
+   feedback. You do not need a second microphone player for this node.
+
+6. Connect transcribed_msg(is_complete, new_text) or transcribed(text) to
+   display recognized text. This version emits final results only, with
+   is_complete=true. For the default supported magic phrases, connect:
+     command_recognized(command, transcript)
+   Saying "fire magic" emits command="fire". Matching ignores case and
+   punctuation, but is otherwise exact. Edit Magic Types in the Inspector
+   to change the supported list. This list matches the finished text; it
+   does not constrain the model's decoding or act as an initial prompt.
+
+7. To stop and submit the current phrase:
+     $ParakeetCapture.stop_recording()
+   To manually submit an existing mono float audio buffer:
+     $ParakeetCapture.transcribe_audio(samples, sample_rate)
+   transcribe_audio returns false if the model is loading or the decoder
+   is busy. Stop waits for an active phrase endpoint; it does not cancel
+   an in-flight decode. For explicit destruction, use queue_free(), or
+   call shutdown() before free(). Normal scene exit joins the worker.
+
+ANDROID EXPORT
+
+  - ARM64 / arm64-v8a only; standard single-precision Godot 4.x.
+  - Set minimum SDK to at least 27 for the bundled ONNX runtime.
+  - Enable the Record Audio export permission and request it at runtime.
+  - Add *.onnx,*.txt to Resources > Filters to export non-resource files.
+  - Keep this addon's .gdextension dependencies and all three Android .so
+    files. Godot uses the dependencies section to include Sherpa and ORT.
+  - Keep the existing game's Quest/OpenXR configuration.
+  - Do not run the old Whisper recorder at the same time when comparing.
+
+ON FIRST ANDROID LAUNCH
+
+ONNX Runtime needs ordinary files rather than files inside the APK/PCK.
+The addon copies the four packaged model files into user://godot_parakeet/
+tdt-v2-int8 in 4 MiB chunks, then reuses them on later launches. Allow time
+for this first copy and keep enough free storage for the packaged model
+and an additional approximately 631 MiB writable copy. Captured speech
+stays in memory; the addon does not save microphone recordings or upload
+them. It makes no network requests at runtime.
+
+ENDPOINTING AND LATENCY
+
+This version collects an utterance, waits for a pause, then transcribes it
+once. It uses configurable audio-level endpointing, not Silero VAD:
+  Speech Threshold Db: -40 (raise toward -30 for a noisy room; lower
+    toward -50 if quiet speech is being missed)
+  Silence Ms: 400
+  Minimum Speech Ms: 100
+  Maximum Phrase Ms: 4000
+  Worker Threads: 2 (restart the scene after changing it)
+
+Audio-level detection cannot distinguish speech from all background noise.
+It submits on trailing silence or the maximum phrase duration. While
+decoding, the node discards microphone frames and reports "Transcribing";
+wait for the result before speaking the next command. There is no queued
+transcription backlog. End-to-end latency includes the pause plus inference.
+
+This is a CPU INT8 implementation. It does not claim GPU/NPU acceleration.
+Whisper's initial_prompt, .bin model fields, and Silero settings do not apply.
+Parakeet is 600M parameters versus Whisper tiny's 39M. Size alone does not
+determine speed, but this model uses much more storage and can use much more
+RAM. A desktop benchmark cannot establish Quest 3 performance in a VR game.
+
+EXAMPLE PROJECT
+
+Parakeet-Example-Project.zip includes the demo scene, a bundled speech test,
+and native binaries, but no model files. Extract it, merge the model ZIP
+inside the parakeet-example folder, and open project.godot there. The demo
+has buttons for a bundled-recording test and microphone recording. It is
+a standard windowed project; an immersive scene is not included.
+
+VALIDATION AND LIMITS
+
+Native builds pass on Windows x86_64 and Android ARM64. The wrapper and
+bundled Sherpa/ONNX Android libraries pass 16 KiB ELF checks and strong
+import dependency closure against Android API 27 system libraries and
+Godot's packaged C++ runtime. Exported APK contents are inspected for the
+required native dependencies and all four model files.
+
+The 11-second JFK test recording transcribed correctly on this Windows PC
+in approximately 0.7-0.9 s per decode, excluding model load, using 2 threads.
+That result is not a Quest benchmark or a guarantee of a Whisper speedup.
+Tests cover background decoding, final text signals, refusing additional
+queued decodes, flushing on stop, exact command matching, and joining the
+worker at shutdown. Actual Quest loading, microphone capture, endpoint
+quality, memory pressure, recognition accuracy, and VR performance remain
+unverified.
+
+A first-import headless Godot editor shutdown crash was seen on this PC
+with both earlier Whisper builds and the Parakeet project; subsequent
+imports, runtime tests, and exports work. This fork does not fix that
+separate development-tool issue.
+
+REBUILD
+
+Requires Python 3.12+, SCons 4.11.1, and initialized godot-cpp submodule.
+Dependency downloads are pinned to SHA256 in parakeet/dependencies.json.
+
+  git clone --recursive --branch parakeet-android https://github.com/Galygious/godot-whisper.git
+  cd godot-whisper
+  python -m pip install scons==4.11.1
+  python scripts/prepare_parakeet.py --platform all --models
+
+Windows (MSVC Build Tools installed):
+  scons -f SConstruct.parakeet platform=windows arch=x86_64 target=template_release use_static_cpp=no build_profile=parakeet/build_profile.json -j8
+
+Android (NDK r27d, 27.3.13750724): set ANDROID_NDK_ROOT to the extracted NDK,
+then run:
+  scons -f SConstruct.parakeet platform=android arch=arm64 target=template_release ANDROID_HOME= build_profile=parakeet/build_profile.json -j8
+  python scripts/check_parakeet_android.py --ndk PATH_TO_NDK
+
+Open parakeet/project.godot to import it, then run its demo. Test commands:
+  godot --headless --path parakeet --script res://tests/decode.gd
+  godot --headless --path parakeet --script res://tests/capture.gd
+
+The parakeet/export_presets.cfg example includes model files and microphone
+permission. It uses Gradle to declare minimum SDK 27: install the Android
+build template through Godot's Project menu. Supply matching Godot Android
+templates, JDK, SDK, and a debug keystore in Editor Settings before exporting.
+
+LICENSES
+
+Addon code uses the upstream project's MIT license. Sherpa-ONNX uses
+Apache-2.0. ONNX Runtime uses MIT plus bundled third-party notices. Parakeet
+weights are CC BY 4.0; NVIDIA and the Sherpa INT8 conversion are credited in
+licenses/MODEL-ATTRIBUTION.txt. All downloads retain these notices.
