@@ -1,0 +1,162 @@
+Godot Whisper: Quest 3 / Android ARM64 test build
+
+Status: prerelease; Quest hardware validation pending.
+Upstream: https://github.com/appsinacup/godot-whisper
+Fork: https://github.com/Galygious/godot-whisper
+Release: https://github.com/Galygious/godot-whisper/releases/tag/quest3-test-v0.1.0
+Upstream base: e490cbbb74b0f79abc787b34970f18dc15b258f3
+Related issue: https://github.com/appsinacup/godot-whisper/issues/102
+
+DOWNLOADS
+
+Quest-Whisper-Test-arm64.apk
+  Signed debug APK, Godot 4.6.2, ARM64 only, package
+  com.galygames.questwhispertest. Includes tiny.en Q5_1 English model.
+  Runs offline and requests only microphone permission. Captured microphone
+  audio stays in memory. This is a standard Android windowed test app, with
+  a bundled recording test and a five-second microphone test. It does not
+  implement an immersive VR scene.
+
+Godot-Whisper-Android-ARM64.zip
+  Full matching addon scripts plus the fixed ARM64 .so. Native libraries
+  for desktop platforms are not included; preserve your existing desktop
+  libraries if you need to open the addon in a desktop Godot editor.
+
+GitHub also provides source ZIP/tar archives for the release tag. The source
+contains the build fix and the quest-test project. Weights and generated
+native binaries are release assets, not Git source files.
+
+INSTALL AND TEST ON QUEST 3
+
+1. Open the release page and download Quest-Whisper-Test-arm64.apk.
+   GitHub downloads work independently of installation. Quest may not offer
+   installation directly from its browser; use your normal APK sideloading
+   method (for example, SideQuest or ADB) if needed. Developer Mode and USB
+   debugging authorization are needed for ADB sideloading.
+
+   From a computer with the headset connected and authorized:
+     adb devices
+     adb install -r Quest-Whisper-Test-arm64.apk
+
+2. Open Quest Whisper Test from the headset's Unknown Sources app list.
+   The screen should first report that the extension loaded and then that
+   the offline model loaded. Allow the first model load to finish.
+
+3. Press "1. Transcribe bundled speech". Expect the JFK quote containing
+   "ask not what your country can do for you". This checks transcription
+   separately from microphone access.
+
+4. Press "2. Record 5 seconds and transcribe". Allow microphone access,
+   speak a short English sentence, and wait for the transcript. Check that
+   the microphone level meter moves. Headset mute and permission settings
+   can prevent audio capture even when the library loads correctly.
+
+5. Report the status message and elapsed time shown on screen. If it crashes
+   or stays at the splash screen, capture logs immediately after launching:
+     adb logcat -d -s godot:V AndroidRuntime:E linker:E > quest-whisper-log.txt
+   Include the Quest software version and Godot version of any separate
+   project being tested. No Quest runtime performance numbers are available
+   from this build environment.
+
+USE THE ADDON IN AN EXISTING GODOT PROJECT
+
+Back up the existing addons/godot_whisper folder. Extract the addon ZIP's
+addons/godot_whisper into the project, keeping scripts and native library
+from this build together. Keep your existing models and project scenes.
+Use standard single-precision Godot 4.x; the bundled APK uses Godot 4.6.2.
+The double-precision native library is not included in this release.
+
+For the initial Android test:
+  - Export ARM64 only; disable armeabi-v7a, x86, and x86_64.
+  - Enable Audio > Driver > Enable Input.
+  - Declare and request RECORD_AUDIO permission before starting capture.
+  - Set audio/input/transcribe/use_gpu to false.
+  - Start with tiny.en or tiny.en-q5_1 and short push-to-talk recordings.
+  - An immersive project also needs its normal OpenXR/Quest configuration.
+
+WHAT CHANGED
+
+The previous SConstruct workaround guarded both NEON FP16 loads behind
+__ARM_FEATURE_FP16_VECTOR_ARITHMETIC. Baseline ARM64 still instantiates the
+FP16-to-FP32 matrix path, leaving this function undefined in the shared lib:
+  _ZN12_GLOBAL__N_14loadI13__Float32x4_ttEET_PKT0_
+
+The fix preserves FP16-to-FP32 conversion on ARM64 while guarding only the
+FP16 vector load. ARM32 uses a scalar conversion fallback. The source patch
+accepts both a fresh upstream submodule and one modified by the old build.
+Android linking now rejects unresolved symbols and uses 16 KiB ELF segment
+alignment. No newer CPU instruction set is required by the ARM64 binary.
+
+VALIDATION
+
+  - Reproduced the exact unresolved symbol with the original build on r27d.
+  - Fixed ARM64 library links with --no-undefined.
+  - Baseline ARM64, FP16-capable ARM64, and baseline ARM32 sgemm compile
+    without the unresolved load template. These are compile checks; only
+    the complete ARM64 Android library is provided.
+  - All 222 strong native imports resolve against the APK's libc++ runtime
+    and Android API 24 system library stubs.
+  - ELF load segments have 16 KiB alignment.
+  - APK includes the fixed ARM64 .so and the model, declares RECORD_AUDIO,
+    and passes APK v2/v3 signature verification and 16 KiB ZIP alignment.
+  - The test project's bundled speech transcribes successfully on Windows
+    using same-source native code in Godot 4.6.2 and Godot 4.7.2.
+  - Quest library loading, microphone capture, sustained VR frame rate,
+    battery impact, and headset transcription latency remain unverified.
+  - A pre-existing Windows headless editor first-import shutdown crash was
+    observed with both an upstream Windows DLL and a same-source Windows
+    build. Runtime transcription and subsequent APK export succeeded. This
+    Android fix does not address that separate desktop editor issue.
+
+BUILD FROM SOURCE (WINDOWS)
+
+Install Python, Git, SCons 4.11.1, and Android NDK r27d (27.3.13750724).
+Use a path containing the extracted NDK's source.properties file.
+
+  git clone --recursive --branch quest-android https://github.com/Galygious/godot-whisper.git
+  cd godot-whisper
+  python -m pip install scons==4.11.1
+  .\scripts\build_android_arm64.ps1 -NdkRoot C:\path\to\android-ndk-r27d
+
+The script uses a small Godot C++ binding profile for the classes this
+extension needs. It does not remove features from the Godot engine or from
+the consuming game. Its output is:
+  bin/addons/godot_whisper/bin/libgodot_whisper.android.template_release.arm64.so
+
+BUILD FROM SOURCE (LINUX)
+
+  export ANDROID_NDK_ROOT=/path/to/android-ndk-r27d
+  scons platform=android arch=arm64 target=template_release ANDROID_HOME= build_profile=scripts/android_build_profile.json -j8
+  python scripts/check_android_arm64.py --ndk "$ANDROID_NDK_ROOT"
+
+ANDROID_HOME= is intentional: the pinned godot-cpp version otherwise chooses
+a hardcoded r23 NDK below ANDROID_HOME. The toolchain selection is local to
+the build invocation; no machine-wide environment changes are required.
+
+BUILD THE TEST APK
+
+  python scripts/prepare_quest_test.py
+
+This prepares quest-test/ and downloads the 30.7 MiB English Q5_1 model,
+checking its SHA256. You can supply --model C:\path\to\ggml-tiny.en-q5_1.bin
+to reuse an existing file. Build a native desktop library as well if you
+want to run transcription in the desktop editor. The helper copies any
+native .so/.dll builds already present in bin/addons/godot_whisper/bin.
+
+Open quest-test/project.godot in Godot 4.6.2 with matching Android export
+templates. Configure the Android SDK, JDK, and debug keystore in Editor
+Settings. Export the "Quest ARM64 Test" Android preset. It uses the regular
+APK template, ARM64, and Compatibility renderer; no Gradle or OpenXR loader
+is needed for this windowed diagnostic app.
+
+The test audio import must use PCM (jfk.wav.import sets compress/mode=0).
+The export preset includes models/*.bin and licenses/*.txt explicitly.
+
+LICENSES AND MODEL
+
+Original project and dependency licenses are retained in quest-test/licenses
+and in the addon ZIP. The model is from:
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en-q5_1.bin
+Model SHA256:
+  c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b
+The test APK is debug-signed for sideload testing; it is not a store release.

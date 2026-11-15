@@ -1,3 +1,21 @@
+## Quest 3 Android test fork
+
+This fork fixes the Android ARM64 unresolved NEON `load` symbol reported in
+[upstream issue #102](https://github.com/appsinacup/godot-whisper/issues/102).
+The original build reproduces the missing symbol even with NDK r27d; the fix
+keeps the FP16-to-FP32 conversion available on baseline ARM64.
+
+**[Download the Quest test prerelease](https://github.com/Galygious/godot-whisper/releases/tag/quest3-test-v0.1.0)**
+
+The release provides a signed APK with an offline model, an addon ZIP, and
+rebuild instructions. The APK is a standard Android windowed app for testing
+native loading and microphone transcription on Quest; it is not an immersive
+VR application. Local build, linker, dependency, and desktop transcription
+checks pass. Quest hardware testing is still pending.
+
+See [QUEST-ANDROID.txt](QUEST-ANDROID.txt) for installation, verification, and
+source build instructions. Upstream documentation follows below.
+
 <p align="center">
 	<img width="128px" src="whisper_logo.png"/> 
 	<h1 align="center">Godot Whisper</h1> 

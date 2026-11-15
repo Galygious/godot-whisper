@@ -1,0 +1,7 @@
+{
+  "enabled_classes": [
+    "AudioServer", "Engine", "FileAccess", "Mutex", "Node", "OS",
+    "ProjectSettings", "Resource", "ResourceFormatLoader", "ResourceLoader",
+    "Thread", "Time"
+  ]
+}

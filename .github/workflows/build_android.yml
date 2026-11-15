@@ -42,6 +42,10 @@ jobs:
           float-precision: ${{ matrix.precision }}
           build-target-type: template_release
 
+      - name: Check ARM64 library and NEON load regression
+        if: matrix.arch == 'arm64' && matrix.precision == 'single'
+        run: python scripts/check_android_arm64.py --ndk "$ANDROID_NDK_ROOT"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

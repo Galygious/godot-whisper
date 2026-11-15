@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import re
 import sys
 
 env = SConscript("thirdparty/godot-cpp/SConstruct")
@@ -189,22 +190,69 @@ elif env["platform"] in ["linux", "windows"]:
 sources.extend(cpu_sources)
 
 # ── Patch upstream bugs in whisper.cpp submodule ──────────────────────────────
-# sgemm.cpp has a known fp16 NEON guard bug (FIXME in source) that breaks arm32.
-# It checks !defined(_MSC_VER) instead of __ARM_FEATURE_FP16_VECTOR_ARITHMETIC.
-# Patch at build time so CI works without a custom submodule fork.
+# Only the FP16 vector load requires FP16 vector arithmetic. The FP16 -> FP32
+# load is also used by the baseline NEON matmul path. Guarding both loads with
+# __ARM_FEATURE_FP16_VECTOR_ARITHMETIC leaves an undefined load<float32x4_t,
+# ggml_fp16_t> on Android arm64 (issue #102), even with a newer NDK.
+# Keep the conversion load available, using scalar conversion on arm32.
 _sgemm_path = cpu_dir + "/llamafile/sgemm.cpp"
 with open(_sgemm_path, "r") as f:
     _sgemm_txt = f.read()
-_sgemm_orig = '#if !defined(_MSC_VER)\n// FIXME: this should check for __ARM_FEATURE_FP16_VECTOR_ARITHMETIC'
-if _sgemm_orig in _sgemm_txt:
-    _sgemm_txt = _sgemm_txt.replace(
-        _sgemm_orig,
-        '#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && !defined(_MSC_VER)')
-    _sgemm_txt = _sgemm_txt.replace(
-        '#endif // _MSC_VER\n#endif // __ARM_NEON',
-        '#endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC\n#endif // __ARM_NEON')
+_sgemm_orig = '''#if !defined(_MSC_VER)
+// FIXME: this should check for __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+template <> inline float16x8_t load(const ggml_fp16_t *p) {
+    return vld1q_f16((const float16_t *)p);
+}
+
+template <> inline float32x4_t load(const ggml_fp16_t *p) {
+    return vcvt_f32_f16(vld1_f16((const float16_t *)p));
+}
+#endif // _MSC_VER'''
+# Also accept a submodule already modified by the previous build workaround.
+_sgemm_legacy = _sgemm_orig.replace(
+    '#if !defined(_MSC_VER)\n// FIXME: this should check for __ARM_FEATURE_FP16_VECTOR_ARITHMETIC',
+    '#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && !defined(_MSC_VER)',
+).replace('#endif // _MSC_VER', '#endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC')
+_sgemm_fixed = '''#if defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && !defined(_MSC_VER)
+template <> inline float16x8_t load(const ggml_fp16_t *p) {
+    return vld1q_f16((const float16_t *)p);
+}
+#endif // __ARM_FEATURE_FP16_VECTOR_ARITHMETIC
+
+#if !defined(_MSC_VER)
+template <> inline float32x4_t load(const ggml_fp16_t *p) {
+#if defined(__aarch64__)
+    // ARM64 supports FP16 conversion without FP16 vector arithmetic.
+    return vcvt_f32_f16(vld1_f16((const float16_t *)p));
+#else
+    float tmp[4];
+    for (int i = 0; i < 4; ++i) {
+        tmp[i] = unhalf(p[i]);
+    }
+    return vld1q_f32(tmp);
+#endif
+}
+#endif // _MSC_VER'''
+def _sgemm_block_pattern(block):
+    # Tolerate checkouts/build tools that normalize blank lines.
+    return r"\s*\n".join(re.escape(line) for line in block.splitlines() if line.strip())
+
+if not re.search(_sgemm_block_pattern(_sgemm_fixed), _sgemm_txt):
+    for _old_block in (_sgemm_orig, _sgemm_legacy):
+        _sgemm_txt, _replaced = re.subn(
+            _sgemm_block_pattern(_old_block), lambda match: _sgemm_fixed,
+            _sgemm_txt, count=1)
+        if _replaced:
+            break
+    if not _replaced:
+        raise RuntimeError("sgemm.cpp NEON load block changed; review the FP16 workaround")
     with open(_sgemm_path, "w") as f:
         f.write(_sgemm_txt)
+
+if env["platform"] == "android":
+    # Do not ship a .so that only fails when Android tries to dlopen it.
+    # 16 KiB alignment also permits loading on 16 KiB-page Android devices.
+    env.Append(LINKFLAGS=["-Wl,--no-undefined", "-Wl,-z,max-page-size=16384"])
 
 # Some MinGW Windows SDK headers define _WIN32_WINNT high enough for
 # SetThreadInformation but do not expose thread power throttling symbols.
