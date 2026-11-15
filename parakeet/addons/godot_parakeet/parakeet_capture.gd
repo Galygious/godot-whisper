@@ -172,7 +172,10 @@ func _start_microphone() -> void:
 func _process(_delta: float) -> void:
 	if _capture == null:
 		return
-	var frames := _capture.get_buffer(_capture.get_frames_available())
+	var available := _capture.get_frames_available()
+	if available <= 0:
+		return
+	var frames := _capture.get_buffer(available)
 	if not recording or _busy or frames.is_empty():
 		return
 	var samples := PackedFloat32Array()
